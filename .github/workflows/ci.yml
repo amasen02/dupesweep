@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# CI: restore, build (Release) and run the test suite on every push to master.
+# Tests are deterministic and run entirely against isolated temp directories,
+# so no network and no shared state.
+# ---------------------------------------------------------------------------
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build · Test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore DupeSweep.slnx
+
+      - name: Build (Release)
+        run: dotnet build DupeSweep.slnx --configuration Release --no-restore
+
+      - name: Test (Release)
+        run: dotnet test DupeSweep.slnx --configuration Release --no-build --verbosity normal
+
+      - name: Vulnerable package scan (informational)
+        run: dotnet list DupeSweep.slnx package --vulnerable --include-transitive || true

@@ -1,0 +1,22 @@
+version: 2
+
+updates:
+
+  - package-ecosystem: nuget
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: 'Asia/Colombo'
+    open-pull-requests-limit: 10
+    labels: ['deps', 'nuget']
+    commit-message:
+      prefix: 'chore(deps)'
+      include: 'scope'
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule: { interval: weekly, day: monday, timezone: 'Asia/Colombo' }
+    labels: ['deps', 'github-actions']
+    commit-message: { prefix: 'chore(deps-ci)', include: 'scope' }

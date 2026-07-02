@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------------------
+# CodeQL — static security analysis for C#. Findings appear under the Security
+# tab. Uses build-mode: none (analyses source without a full build).
+# ---------------------------------------------------------------------------
+name: codeql
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: '41 5 * * 1'        # weekly, Monday 05:41 UTC
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (C#)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Init CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          build-mode: none
+          queries: security-extended,security-and-quality
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:csharp'

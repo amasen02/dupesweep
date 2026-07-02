@@ -1,0 +1,40 @@
+name: Feature request / enhancement
+description: Propose a new capability or an improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What gap or pain does this address? What is the use case?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would build or change, and roughly how it fits the existing design.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed and why this one wins.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scanning / filtering
+        - Duplicate detection / hashing
+        - Keep strategy
+        - Quarantine / apply
+        - Restore
+        - CLI / options
+        - Performance
+        - Docs
+    validations:
+      required: true

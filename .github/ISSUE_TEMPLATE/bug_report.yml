@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a defect so it can be reproduced and fixed.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please search existing issues first to avoid duplicates.
+        Do not paste credentials or sensitive file paths.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I ran ..., I expected ..., but instead ...
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact `dsweep` command you ran (redact any sensitive paths).
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Scanning / filtering
+        - Duplicate detection / hashing
+        - Keep strategy
+        - Quarantine / apply
+        - Restore
+        - CLI / options
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS + `dotnet --version` (or the published build you used).
+      placeholder: Windows 11, .NET 10.0.301
+    validations:
+      required: false
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / error
+      description: Paste relevant `dsweep` output (run with `-v` for verbose).
+      render: shell
+    validations:
+      required: false
