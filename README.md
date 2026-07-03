@@ -44,6 +44,22 @@ dotnet publish src/DupeSweep -c Release -r win-x64 --self-contained false -p:Pub
 dotnet publish src/DupeSweep -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o dist
 ```
 
+### Or run it in Docker — no .NET install required
+
+```bash
+git clone https://github.com/amasen02/dupesweep.git
+cd dupesweep
+docker build -t dupesweep .
+
+# Mount the directory you want to scan at /scan:
+docker run --rm -v "$PWD":/scan dupesweep /scan
+docker run --rm -v "$PWD":/scan dupesweep /scan --json
+docker run --rm -v "$PWD":/scan dupesweep /scan --apply quarantine
+```
+
+The image runs the full test suite as part of the build (so a broken build never produces an
+image) and runs as the container's built-in unprivileged `app` user, not root.
+
 The binary is named **`dsweep`** (`dist/dsweep`, or `dist\dsweep.exe` on Windows). Put `dist` on
 your `PATH` to call `dsweep` from anywhere. To run without publishing:
 
