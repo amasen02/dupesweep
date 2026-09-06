@@ -1,7 +1,6 @@
 # DupeSweep (`dsweep`) — a fast duplicate-file finder and reclaimer
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/amasen02/dupesweep/badge)](https://securityscorecards.dev/viewer/?uri=github.com/amasen02/dupesweep)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10332/badge)](https://www.bestpractices.dev/en)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](.github/SECURITY.md)
 
 
