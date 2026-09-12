@@ -27,7 +27,7 @@ public class QuarantineServiceTests
     }
 
     [Fact]
-    public void Quarantine_NameCollisionAcrossGroups_GetsUniqueSuffix()
+    public void Quarantine_NameCollisionWithinOperation_GetsUniqueSuffixAndDoesNotOverwrite()
     {
         using var dir = new TempDirectory();
         string keepA = dir.WriteFile("groupA/keep.txt", "content A");
@@ -38,21 +38,22 @@ public class QuarantineServiceTests
         var duplicate = new FileEntry(dupA, 9, DateTime.UtcNow);
         var group = new DuplicateGroup("hash", 9, [keep, duplicate]);
 
-        // Two resolutions whose duplicate files share the same file name ("dup.txt") but
-        // live in the same quarantine group folder — the second must not overwrite the first.
-        var resolution = new DuplicateResolution(group, keep, [duplicate]);
-        string dupB = dir.WriteFile("groupB/dup.txt", "content B");
+        string dupB = dir.WriteFile("groupB/dup.txt", "content A");
         var duplicateB = new FileEntry(dupB, 9, DateTime.UtcNow);
-        var resolutionSameGroupIndex = new DuplicateResolution(group, keep, [duplicateB]);
+        var resolution = new DuplicateResolution(group, keep, [duplicate, duplicateB]);
+        string groupDir = Path.Combine(quarantineDir, "0");
+        Directory.CreateDirectory(groupDir);
+        string preexisting = dir.WriteFile("preexisting", "content A");
+        File.Move(preexisting, Path.Combine(groupDir, "dup.txt"));
+        Directory.CreateDirectory(Path.Combine(groupDir, "dup_2.txt"));
 
-        // Force both duplicates into the same quarantine group directory (index 0) to prove
-        // the collision-avoidance logic works even for identically named files.
         var manifest = QuarantineService.Quarantine([resolution], quarantineDir);
-        var manifest2 = QuarantineService.Quarantine([resolutionSameGroupIndex], quarantineDir);
 
-        Assert.NotEqual(manifest[0].QuarantinePath, manifest2[0].QuarantinePath);
+        Assert.Equal(Path.Combine(groupDir, "dup_3.txt"), manifest[0].QuarantinePath);
+        Assert.Equal(Path.Combine(groupDir, "dup_4.txt"), manifest[1].QuarantinePath);
         Assert.True(File.Exists(manifest[0].QuarantinePath));
-        Assert.True(File.Exists(manifest2[0].QuarantinePath));
+        Assert.True(File.Exists(manifest[1].QuarantinePath));
+        Assert.Equal("content A", File.ReadAllText(Path.Combine(groupDir, "dup.txt")));
     }
 
     [Fact]
@@ -86,7 +87,7 @@ public class QuarantineServiceTests
         var resolution = new DuplicateResolution(group, keep, [duplicate]);
 
         var manifest = QuarantineService.Quarantine([resolution], quarantineDir);
-        string manifestPath = Path.Combine(quarantineDir, "manifest.json");
+        string manifestPath = Path.Combine(dir.Path, "manual-manifest.json");
         QuarantineService.WriteManifest(manifest, manifestPath);
 
         var reloaded = RestoreService.ReadManifest(manifestPath);
@@ -94,5 +95,55 @@ public class QuarantineServiceTests
         Assert.Single(reloaded);
         Assert.Equal(manifest[0].OriginalPath, reloaded[0].OriginalPath);
         Assert.Equal(manifest[0].QuarantinePath, reloaded[0].QuarantinePath);
+    }
+
+    [Fact]
+    public void Quarantine_RefusesExistingManifestBeforeMovingAnything()
+    {
+        using var dir = new TempDirectory();
+        string keepPath = dir.WriteFile("keep.txt", "dup content");
+        string dupPath = dir.WriteFile("dup.txt", "dup content");
+        string quarantineDir = dir.CreateSubdirectory(".dupesweep-quarantine");
+        string manifestPath = Path.Combine(quarantineDir, "manifest.json");
+        File.WriteAllText(manifestPath, "sentinel");
+
+        var keep = new FileEntry(keepPath, 11, DateTime.UtcNow);
+        var duplicate = new FileEntry(dupPath, 11, DateTime.UtcNow);
+        var group = new DuplicateGroup("hash", 11, [keep, duplicate]);
+        var resolution = new DuplicateResolution(group, keep, [duplicate]);
+
+        Assert.Throws<InvalidOperationException>(() => QuarantineService.Quarantine([resolution], quarantineDir));
+        Assert.True(File.Exists(dupPath));
+        Assert.Equal("sentinel", File.ReadAllText(manifestPath));
+    }
+
+    [Fact]
+    public void Quarantine_PartialMoveLeavesFullManifestForRestore()
+    {
+        using var dir = new TempDirectory();
+        string keepPath = dir.WriteFile("keep.txt", "dup content");
+        string firstDuplicatePath = dir.WriteFile("first.txt", "dup content");
+        string missingDuplicatePath = Path.Combine(dir.Path, "missing.txt");
+        string quarantineDir = dir.CreateSubdirectory(".dupesweep-quarantine");
+
+        var keep = new FileEntry(keepPath, 11, DateTime.UtcNow);
+        var firstDuplicate = new FileEntry(firstDuplicatePath, 11, DateTime.UtcNow);
+        var missingDuplicate = new FileEntry(missingDuplicatePath, 11, DateTime.UtcNow);
+        var group = new DuplicateGroup("hash", 11, [keep, firstDuplicate, missingDuplicate]);
+        var resolution = new DuplicateResolution(group, keep, [firstDuplicate, missingDuplicate]);
+
+        Assert.ThrowsAny<IOException>(() => QuarantineService.Quarantine([resolution], quarantineDir));
+
+        string manifestPath = Path.Combine(quarantineDir, "manifest.json");
+        var manifest = RestoreService.ReadManifest(manifestPath);
+        Assert.Equal(2, manifest.Count);
+        Assert.False(File.Exists(firstDuplicatePath));
+        Assert.True(File.Exists(manifest[0].QuarantinePath));
+
+        RestoreSummary summary = RestoreService.Restore(manifest, dryRun: false);
+        Assert.Equal(1, summary.Restored);
+        Assert.Equal(1, summary.Skipped);
+        Assert.True(File.Exists(firstDuplicatePath));
+        Assert.Equal("dup content", File.ReadAllText(firstDuplicatePath));
     }
 }
