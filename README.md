@@ -235,3 +235,12 @@ dotnet run --project src/DupeSweep.Cli -- scan ./target-folder
 2. Create your feature branch (`git checkout -b feat/my-awesome-idea`).
 3. Verify tests pass cleanly.
 4. Open a PR &mdash; we review and merge PRs within 24–48 hours!
+
+
+---
+
+## 📈 Stargazers Over Time
+
+[![Star History Chart](https://api.star-history.com/svg?repos=amasen02/dupesweep&type=Date)](https://star-history.com/#amasen02/dupesweep&Date)
+
+⭐ **Found DupeSweep helpful? Please star the repository to support continued development!**
