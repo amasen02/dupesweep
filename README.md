@@ -1,246 +1,206 @@
-# DupeSweep (`dsweep`) — a fast duplicate-file finder and reclaimer
-
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/amasen02/dupesweep/badge)](https://securityscorecards.dev/viewer/?uri=github.com/amasen02/dupesweep)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](.github/SECURITY.md)
-
+# DupeSweep (`dsweep`)
 
 [![CI](https://github.com/amasen02/dupesweep/actions/workflows/ci.yml/badge.svg)](https://github.com/amasen02/dupesweep/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/amasen02/dupesweep/actions/workflows/codeql.yml/badge.svg)](https://github.com/amasen02/dupesweep/actions/workflows/codeql.yml)
-[![.NET](https://img.shields.io/badge/.NET-10-blueviolet)](https://dotnet.microsoft.com/)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/amasen02/dupesweep/badge)](https://securityscorecards.dev/viewer/?uri=github.com/amasen02/dupesweep)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue.svg)](.github/SECURITY.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-blue)](CODE_OF_CONDUCT.md)
 
-Find exact duplicate files across one or more directories and reclaim the wasted space —
-safely. DupeSweep never deletes anything by default: it reports first, and when you do ask it
-to act, `--apply quarantine` moves duplicates into a folder with a manifest so the move can be
-undone with `dsweep restore`.
+DupeSweep finds byte-for-byte duplicate files across directories. A scan reports
+duplicates without changing files. When requested, `--apply quarantine` moves the
+selected duplicates into a quarantine directory and records their original paths in
+a manifest that `dsweep restore` can use.
 
-## Why another duplicate finder
+The scanner narrows work in three steps: it groups files by size, hashes the first
+64 KiB of same-size candidates, then computes a full SHA-256 only for quick-hash
+matches. Files with the same size but different contents are therefore excluded from
+duplicate groups.
 
-Most "find duplicates" scripts either trust file size alone (wrong — two different files can
-be the same size) or hash every file up front (slow — hashing a 4 GB video you'll never
-compare against anything is wasted work). DupeSweep runs a three-stage funnel so the expensive
-work only happens on real candidates:
+## Install a release archive
 
-| Stage | Cost | What it does |
-|---|---|---|
-| **1. Group by size** | Free (already have it from the directory listing) | Files with a unique size can't have a duplicate — discarded immediately. |
-| **2. Quick hash** | Cheap | SHA-256 of just the first 64 KB, computed in parallel across CPU cores. Narrows same-size files down to real candidates. |
-| **3. Full hash** | Only for survivors | Full-file SHA-256 confirms a true byte-for-byte match before anything is reported as a duplicate. |
+Release archives are self-contained native builds; a .NET runtime is not required.
+Download the archive for the operating system and CPU architecture from the
+[Releases page](https://github.com/amasen02/dupesweep/releases), and download
+`SHA256SUMS` from the same release. The archive contains the `dsweep` executable and
+`LICENSE`.
 
-The result: a `~/Downloads` or photo library scan with tens of thousands of files only fully
-hashes the handful that are actually worth comparing.
-
-## Install
-
-DupeSweep targets **.NET 10**. Build a single-file executable from source:
+Verify the downloaded archive before extracting it. On Linux or macOS:
 
 ```bash
-git clone https://github.com/amasen02/dupesweep.git
-cd dupesweep
-
-# Framework-dependent single file (uses the installed .NET 10 runtime):
-dotnet publish src/DupeSweep -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist
-#   Linux:  -r linux-x64        macOS (Apple Silicon):  -r osx-arm64
-
-# …or fully self-contained (no runtime needed on the target machine):
-dotnet publish src/DupeSweep -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o dist
+sha256sum -c SHA256SUMS --ignore-missing       # Linux
+shasum -a 256 dsweep-1.0.1-osx-arm64.zip      # macOS; compare its line in SHA256SUMS
 ```
 
-### Or run it in Docker — no .NET install required
+The archive names use the release version, for example `dsweep-1.0.1-win-x64.zip`,
+`dsweep-1.0.1-linux-x64.zip`, `dsweep-1.0.1-osx-arm64.zip`, and
+`dsweep-1.0.1-osx-x64.zip`. Replace `1.0.1` below with the version you downloaded.
+
+On Windows PowerShell:
+
+```powershell
+(Get-FileHash .\dsweep-1.0.1-win-x64.zip -Algorithm SHA256).Hash
+# Compare the value with the matching line in SHA256SUMS.
+Expand-Archive .\dsweep-1.0.1-win-x64.zip -DestinationPath .\dsweep
+```
+
+The published executable is unsigned because no code-signing certificate is part of
+this project. Verify the SHA-256 value and release source before running it; Windows
+or macOS may show their normal warning for an unsigned downloaded executable.
+
+### Windows x64
+
+```powershell
+Expand-Archive .\dsweep-1.0.1-win-x64.zip -DestinationPath "$HOME\bin\dsweep"
+& "$HOME\bin\dsweep\dsweep.exe" --help
+```
+
+Add the extracted directory to `PATH` if you want to invoke `dsweep` from any shell.
+
+### Linux x64
 
 ```bash
-git clone https://github.com/amasen02/dupesweep.git
-cd dupesweep
+mkdir -p "$HOME/.local/bin/dsweep"
+unzip dsweep-1.0.1-linux-x64.zip -d "$HOME/.local/bin/dsweep"
+chmod +x "$HOME/.local/bin/dsweep/dsweep"
+"$HOME/.local/bin/dsweep/dsweep" --help
+```
+
+Add `$HOME/.local/bin/dsweep` to `PATH` if desired.
+
+### macOS
+
+Choose `dsweep-1.0.1-osx-arm64.zip` for Apple Silicon or `dsweep-1.0.1-osx-x64.zip` for
+Intel Macs:
+
+```bash
+mkdir -p "$HOME/.local/bin/dsweep"
+unzip dsweep-1.0.1-osx-arm64.zip -d "$HOME/.local/bin/dsweep" # use osx-x64 on Intel
+chmod +x "$HOME/.local/bin/dsweep/dsweep"
+"$HOME/.local/bin/dsweep/dsweep" --help
+```
+
+Distribution uses GitHub Releases; DupeSweep does not require a paid hosting service
+or a hosted account. Network access to GitHub is required to download a release.
+
+### Docker
+
+The repository also contains a Dockerfile for local, framework-dependent use:
+
+```bash
 docker build -t dupesweep .
-
-# Mount the directory you want to scan at /scan:
-docker run --rm -v "$PWD":/scan dupesweep /scan
 docker run --rm -v "$PWD":/scan dupesweep /scan --json
-docker run --rm -v "$PWD":/scan dupesweep /scan --apply quarantine
 ```
 
-The image runs the full test suite as part of the build (so a broken build never produces an
-image) and runs as the container's built-in unprivileged `app` user, not root.
+The native release archives are the supported path when you want a standalone
+executable on the host.
 
-The binary is named **`dsweep`** (`dist/dsweep`, or `dist\dsweep.exe` on Windows). Put `dist` on
-your `PATH` to call `dsweep` from anywhere. To run without publishing:
+### Build from source
+
+Building from source requires the .NET 10 SDK:
 
 ```bash
-dotnet run --project src/DupeSweep -- <dir> [options]
+git clone https://github.com/amasen02/dupesweep.git
+cd dupesweep
+dotnet run --project src/DupeSweep -- --help
+mkdir -p ./target-folder
+dotnet run --project src/DupeSweep -- ./target-folder
 ```
 
 ## Usage
 
-```
+```text
 dsweep <dir> [dir2 ...] [options]
 dsweep restore <manifest.json> [--dry-run]
 ```
 
-### Scan and report (the default — nothing is ever touched)
+The directory arguments are positional. There is no `scan` subcommand.
+
+Scan and report without changing anything:
 
 ```bash
 dsweep ~/Downloads
-```
-
-```
-[1] 4.2 MB x 3 copies  (sha256 74c18fa049de…)
-    KEEP      /home/ama/Downloads/report.pdf
-    DUPLICATE /home/ama/Downloads/report (1).pdf
-    DUPLICATE /home/ama/Downloads/old/report.pdf
-
-dsweep: 1 duplicate group(s), 2 reclaimable file(s), 8.4 MB reclaimable.
-```
-
-### Common options
-
-```bash
-# Only image files, keep the oldest copy of each duplicate
 dsweep ~/Photos ~/Backups/Photos --ext .jpg,.png --keep oldest
-
-# Skip noisy directories, machine-readable output
 dsweep . --exclude node_modules --exclude .git --json
-
-# Ignore anything smaller than 1 MB, cap hashing to 8 threads
 dsweep /data --min-size 1M --parallel 8
 ```
 
-### Reclaim the space — safely
+Apply reversible quarantine after reviewing the report:
 
 ```bash
 dsweep ~/Downloads --apply quarantine
+dsweep restore ~/Downloads/.dupesweep-quarantine/manifest.json --dry-run
+dsweep restore ~/Downloads/.dupesweep-quarantine/manifest.json
 ```
 
-This moves every duplicate (never the file chosen to keep) into
-`~/Downloads/.dupesweep-quarantine/`, grouped by duplicate set, and writes a `manifest.json`
-recording each file's original location. Review the quarantine folder, then either delete it
-once you're confident, or undo the whole thing:
+Quarantine moves files within the selected filesystem. It does not create free disk
+space until you review and remove the quarantine directory yourself. Restore skips an
+entry when its destination already exists, so it does not overwrite a newer file.
+For safety, a quarantine directory containing an existing `manifest.json` is refused;
+choose a new quarantine directory after reviewing or archiving the earlier manifest.
+For an irreversible operation, `--apply delete` permanently deletes duplicates and
+has no restore path.
 
-```bash
-dsweep restore ~/Downloads/.dupesweep-quarantine/manifest.json --dry-run   # preview
-dsweep restore ~/Downloads/.dupesweep-quarantine/manifest.json            # actually restore
-```
-
-Restore never overwrites a file that already exists at the destination — if you recreated a
-file since quarantining it, that entry is skipped and reported instead of clobbering your work.
-
-For an irreversible cleanup once you've reviewed the report, `--apply delete` permanently
-deletes duplicates instead of quarantining them. There is no undo for `delete` — use
-`quarantine` unless you are certain.
-
-### All options
+### Options
 
 | Flag | Meaning |
-|---|---|
-| `--no-recursive` | Only scan the given directories, not subdirectories. |
-| `--min-size <size>` | Ignore files smaller than this (default 1 byte; `0` includes empty files). Accepts `K`/`M`/`G` suffixes. |
-| `--ext <list>` | Only consider these extensions, e.g. `.jpg,.png`. |
-| `--exclude <glob>` | Exclude files/directories matching a glob (repeatable), e.g. `node_modules`, `*.tmp`. |
-| `--follow-symlinks` | Follow symlinked files and directories (off by default; no cycle detection). |
-| `--keep <strategy>` | Which copy survives per group: `first` (default, scan order), `oldest`, `newest`, `shortest-path`. |
-| `--apply <mode>` | `quarantine` (reversible, recommended) or `delete` (permanent). Omit to just report. |
-| `--quarantine-dir <path>` | Destination for `--apply quarantine` (default: `<first-dir>/.dupesweep-quarantine`). |
-| `-j, --parallel <n>` | Hashing worker count (default: CPU core count, max 64). |
-| `--json` | Emit a machine-readable JSON report instead of text. |
-| `-q / -v` | Quiet / verbose (verbose reports files skipped because they couldn't be read). |
+| --- | --- |
+| `--no-recursive` | Scan only the supplied directories. |
+| `--min-size <size>` | Ignore files smaller than this (default 1 byte; `0` includes empty files). Accepts `K`, `M`, and `G`. |
+| `--ext <list>` | Restrict files by extension, for example `.jpg,.png`. |
+| `--exclude <glob>` | Exclude matching files or directories; repeatable. |
+| `--follow-symlinks` | Follow symlinked files and directories. Off by default. |
+| `--keep <strategy>` | Keep `first` (default), `oldest`, `newest`, or `shortest-path`. |
+| `--apply <mode>` | `quarantine` or irreversible `delete`; omit to report only. |
+| `--quarantine-dir <path>` | Quarantine destination; defaults to `<first-dir>/.dupesweep-quarantine`. |
+| `-j, --parallel <n>` | Hashing worker count, from 1 to 64. |
+| `--json` | Emit a machine-readable JSON report. |
+| `-q, --quiet` / `-v, --verbose` | Reduce output or include skipped-file warnings. |
 
-## Tests
+Run the reproducible filesystem demo with:
+
+```powershell
+pwsh -File .\scripts\demo.ps1
+```
+
+The demo requires PowerShell 7 or later (`pwsh`).
+
+See [docs/safe-demo.md](docs/safe-demo.md) for the generated evidence and safety
+properties.
+
+## Development
 
 ```bash
+dotnet build DupeSweep.slnx -c Release
 dotnet test DupeSweep.slnx
 ```
 
-The suite is deterministic: every test that touches the filesystem creates its own temp
-directory (see `tests/DupeSweep.Tests/Support/TempDirectory.cs`) and cleans up after itself. It
-covers the full pipeline — scanning/filtering, the size → quick-hash → full-hash funnel
-(including same-size-but-different-content files, which must **not** be grouped), all four keep
-strategies, quarantine collision handling, restore's no-overwrite guarantee, CLI parsing, and
-both report formats. CI runs the suite on both Ubuntu and Windows.
+The test suite uses isolated temporary directories and covers scanning and filtering,
+the size/quick-hash/full-hash funnel, keep strategies, quarantine and restore, CLI
+parsing, and text/JSON reports. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening
+a pull request, and see [docs/contribution-opportunities.md](docs/contribution-opportunities.md)
+for source-grounded starter tasks.
 
-## Architecture (separation of concerns)
+## Project layout
 
-```
+```text
 src/DupeSweep/
-  Program.cs              CLI orchestration: parse -> scan -> find duplicates -> report -> apply
-  CommandLine.cs          argv parsing + usage (scan mode and restore mode)
-  ScanOptions.cs          parsed configuration + ApplyMode/KeepStrategy enums
-  FileScanner.cs          recursive walk with size/extension/exclude/symlink filtering
-  Hashing.cs              two-tier SHA-256: 64 KB quick hash, then full-file hash
-  DuplicateFinder.cs      the size -> quick-hash -> full-hash funnel, parallelised
-  KeepSelector.cs         chooses which file in a group survives, per strategy
-  QuarantineService.cs    moves duplicates to a quarantine folder + writes the manifest
-  RestoreService.cs       reads a manifest and moves files back, never overwriting
-  ReportWriter.cs         text and JSON rendering
-  Format.cs / Models.cs   byte/duration formatting + records
-tests/DupeSweep.Tests/    xUnit tests against isolated temp directories
+  Program.cs              CLI orchestration
+  CommandLine.cs          argument parsing and usage
+  FileScanner.cs          directory walk and filters
+  Hashing.cs              quick and full SHA-256 hashing
+  DuplicateFinder.cs      duplicate grouping
+  KeepSelector.cs         keep-file selection
+  QuarantineService.cs    reversible quarantine and manifest
+  RestoreService.cs       manifest restore with no-overwrite behavior
+  ReportWriter.cs         text and JSON reports
+tests/DupeSweep.Tests/     filesystem-backed unit tests
 ```
 
-## Contributing
+DupeSweep is licensed under the [MIT License](LICENSE). Security reports should follow
+the private process in [SECURITY.md](SECURITY.md).
 
-Contributions are welcome — bug fixes, new keep/apply strategies, better docs. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow and coding bar, and please be mindful of
-the [Code of Conduct](CODE_OF_CONDUCT.md). Use the issue templates; green CI (`build` + `test`
-on Ubuntu and Windows) is required on every pull request. Report security issues privately per
-[`SECURITY.md`](SECURITY.md) — never as a public issue.
-
-## Open source commitments
-
-This project is, and will remain, free and open source. As maintainer I commit to:
-
-- **A permissive licence, kept stable.** [MIT](LICENSE) — use it commercially, fork it, build on
-  it. No relicensing of accepted contributions.
-- **No CLA.** Contributions are accepted under the MIT licence; you keep the copyright to your work.
-- **An honest history.** Real, walkable commits — no fabricated activity, no rewritten releases.
-- **Best-effort, transparent triage.** Issues and pull requests are read and answered; security
-  reports are acknowledged within 72 hours.
-- **A welcoming community** governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
-- **Reproducible builds.** Green CI — build, tests on two OSes, and CodeQL security analysis —
-  on every change.
-
-## License
-
-MIT — see [`LICENSE`](LICENSE). You are free to use, modify, and distribute this software,
-including for commercial purposes, provided the copyright notice is retained.
-
-## Author
-
-**Ama Senevirathne** — [GitHub](https://github.com/amasen02)
-
----
-
-## 🌟 Fork, Build Upon & Extend This Project
-
-We deliberately built this repository to be **100% open, modular, and easy to fork and extend**:
-
-- 🔓 **Permissive MIT License**: Zero CLA, commercial use permitted, you keep full ownership of your contributions.
-- 🛡️ **Hardened Supply Chain**: Built with automated CI testing, OpenSSF Scorecard supply-chain security, and strict quality checks.
-- ⚡ **High-Performance Foundation**: Zero unnecessary bloat &mdash; clean architectural boundaries that make hacking on this code a joy.
-
-### 💡 High-Impact Ideas Ready for You to Build:
-- **Add AWS S3 / Google Cloud Storage remote bucket deduplication adapter**
-- **Implement parallel streaming xxHash64 / BLAKE3 hashing engine for NVMe drives**
-- **Build an interactive terminal dashboard (Spectre.Console / Bubble Tea style)**
-- **Expose a lightweight local REST / gRPC API for scheduled headless cron deduplication**
-
-### 🚀 60-Second Quickstart
-```bash
-git clone https://github.com/amasen02/dupesweep.git
-cd dupesweep
-dotnet run --project src/DupeSweep.Cli -- scan ./target-folder
-```
-
-### 🤝 Frictionless Contributions
-1. **Fork** the repo & clone it locally.
-2. Create your feature branch (`git checkout -b feat/my-awesome-idea`).
-3. Verify tests pass cleanly.
-4. Open a PR &mdash; we review and merge PRs within 24–48 hours!
-
-
----
-
-## 📈 Stargazers Over Time
+There is no contributor license agreement. Contributions remain under the MIT License.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=amasen02/dupesweep&type=Date)](https://star-history.com/#amasen02/dupesweep&Date)
-
-⭐ **Found DupeSweep helpful? Please star the repository to support continued development!**

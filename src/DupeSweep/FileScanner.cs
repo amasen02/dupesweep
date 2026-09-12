@@ -7,6 +7,7 @@ public static class FileScanner
 {
     public static IEnumerable<FileEntry> Enumerate(IReadOnlyList<string> roots, ScanOptions options)
     {
+        var seenPaths = new HashSet<string>(PathComparer);
         foreach (string root in roots)
         {
             string fullRoot = Path.GetFullPath(root);
@@ -14,7 +15,10 @@ public static class FileScanner
                 throw new DirectoryNotFoundException($"directory not found: {root}");
 
             foreach (FileEntry entry in EnumerateDirectory(fullRoot, options))
-                yield return entry;
+            {
+                if (seenPaths.Add(entry.FullPath))
+                    yield return entry;
+            }
         }
     }
 
@@ -105,4 +109,7 @@ public static class FileScanner
         }
         return false;
     }
+
+    private static StringComparer PathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 }

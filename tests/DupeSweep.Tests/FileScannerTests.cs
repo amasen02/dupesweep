@@ -137,4 +137,19 @@ public class FileScannerTests
 
         Assert.Equal(2, entries.Count);
     }
+
+    [Fact]
+    public void Enumerate_OverlappingRoots_DeduplicatesNormalizedPaths()
+    {
+        using var dir = new TempDirectory();
+        string nested = dir.CreateSubdirectory("nested");
+        string filePath = dir.WriteFile("nested/file.txt", "content");
+
+        var options = new ScanOptions();
+        var entries = FileScanner.Enumerate(
+            [dir.Path, dir.Path, Path.Combine(dir.Path, "nested", ".."), nested], options).ToList();
+
+        Assert.Single(entries);
+        Assert.Equal(Path.GetFullPath(filePath), entries[0].FullPath);
+    }
 }

@@ -110,8 +110,7 @@ public static class Program
                 ?? Path.Combine(Path.GetFullPath(options.Roots[0]), ".dupesweep-quarantine");
 
             IReadOnlyList<ManifestEntry> manifest = QuarantineService.Quarantine(resolutions, quarantineDir);
-            string manifestPath = Path.Combine(quarantineDir, "manifest.json");
-            QuarantineService.WriteManifest(manifest, manifestPath);
+            string manifestPath = Path.Combine(Path.GetFullPath(quarantineDir), "manifest.json");
 
             if (!options.Quiet)
                 Console.Error.WriteLine(

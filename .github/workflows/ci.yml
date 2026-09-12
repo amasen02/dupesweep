@@ -49,3 +49,15 @@ jobs:
 
       - name: Vulnerable package scan (informational)
         run: dotnet list DupeSweep.slnx package --vulnerable --include-transitive || true
+
+  ci:
+    name: ci
+    if: ${{ always() }}
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every build-test matrix leg to pass
+        if: ${{ needs.build-test.result != 'success' }}
+        run: |
+          echo "build-test result was '${{ needs.build-test.result }}'"
+          exit 1

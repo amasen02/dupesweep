@@ -1,0 +1,190 @@
+name: release-build
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Artifact version label (for example 1.0.1)'
+        required: false
+        default: '0.0.0-manual'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.rid }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-14
+            rid: osx-arm64
+          - os: macos-15-intel
+            rid: osx-x64
+    runs-on: ${{ matrix.os }}
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      PACKAGE_VERSION: ${{ inputs.version || format('0.0.0-ci.{0}', github.run_number) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore DupeSweep.slnx
+
+      - name: Test (Release)
+        run: dotnet test DupeSweep.slnx --configuration Release --no-restore --verbosity normal
+
+      - name: Publish self-contained untrimmed single file
+        shell: pwsh
+        run: >-
+          dotnet publish src/DupeSweep/DupeSweep.csproj
+          --configuration Release
+          --runtime ${{ matrix.rid }}
+          --self-contained true
+          --output "${{ runner.temp }}/dsweep-publish-${{ matrix.rid }}"
+          -p:PublishSingleFile=true
+          -p:PublishTrimmed=false
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None
+
+      - name: Package archive and checksum
+        shell: pwsh
+        run: >-
+          ./scripts/package-release.ps1
+          -PublishDirectory "${{ runner.temp }}/dsweep-publish-${{ matrix.rid }}"
+          -Rid "${{ matrix.rid }}"
+          -Version "$env:PACKAGE_VERSION"
+          -OutputDirectory "${{ runner.temp }}/dsweep-artifacts"
+
+      - name: Extract exact archive
+        shell: pwsh
+        run: >-
+          Expand-Archive
+          -LiteralPath "${{ runner.temp }}/dsweep-artifacts/dsweep-${env:PACKAGE_VERSION}-${{ matrix.rid }}.zip"
+          -DestinationPath "${{ runner.temp }}/dsweep-extracted-${{ matrix.rid }}"
+
+      - name: Record source commit receipt
+        shell: pwsh
+        run: |
+          $receipt = "${{ runner.temp }}/dsweep-artifacts/SOURCE-COMMIT-${{ matrix.rid }}.txt"
+          @(
+            "commit: $(git rev-parse HEAD)"
+            "rid: ${{ matrix.rid }}"
+            "runner: ${{ matrix.os }}"
+            "workflow: $env:GITHUB_WORKFLOW"
+            "run: $env:GITHUB_RUN_ID"
+          ) | Set-Content -LiteralPath $receipt -Encoding ascii
+
+      - name: Verify native architecture
+        shell: pwsh
+        run: |
+          $binary = "${{ runner.temp }}/dsweep-extracted-${{ matrix.rid }}/$(if ('${{ matrix.rid }}' -like 'win-*') { 'dsweep.exe' } else { 'dsweep' })"
+          if (-not $IsWindows) {
+              & chmod +x $binary
+              if ($LASTEXITCODE -ne 0) { throw 'Could not mark the extracted Unix binary executable.' }
+          }
+          if ($IsWindows) {
+              $bytes = [IO.File]::ReadAllBytes($binary)
+              $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+              if ($peOffset -lt 0 -or $peOffset + 6 -gt $bytes.Length) { throw 'Invalid PE header.' }
+              $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+              if ($machine -ne 0x8664) { throw "Expected Windows x64 PE machine 0x8664, found 0x$($machine.ToString('x4'))." }
+          }
+          else {
+              $description = (& file $binary)
+              $expected = if ('${{ matrix.rid }}' -eq 'osx-arm64') { 'arm64' } elseif ('${{ matrix.rid }}' -eq 'osx-x64') { 'x86_64' } else { 'x86-64' }
+              if ($description -notmatch $expected) { throw "Expected $expected native binary, got: $description" }
+          }
+
+      - name: Run without an installed .NET runtime
+        shell: pwsh
+        env:
+          DOTNET_MULTILEVEL_LOOKUP: '0'
+        run: |
+          $emptyDotnetRoot = Join-Path $env:RUNNER_TEMP 'empty-dotnet-root'
+          New-Item -ItemType Directory -Path $emptyDotnetRoot -Force | Out-Null
+          $env:DOTNET_ROOT = $emptyDotnetRoot
+          $binary = "${{ runner.temp }}/dsweep-extracted-${{ matrix.rid }}/$(if ('${{ matrix.rid }}' -like 'win-*') { 'dsweep.exe' } else { 'dsweep' })"
+          & $binary --help *> (Join-Path $env:RUNNER_TEMP 'packaged-help.txt')
+          if ($LASTEXITCODE -ne 0) { throw "Self-contained packaged binary failed with exit code $LASTEXITCODE." }
+
+      - name: Smoke exact extracted binary
+        shell: pwsh
+        run: >-
+          ./scripts/smoke-release.ps1
+          -BinaryPath "${{ runner.temp }}/dsweep-extracted-${{ matrix.rid }}/$(if ('${{ matrix.rid }}' -like 'win-*') { 'dsweep.exe' } else { 'dsweep' })"
+          -EvidenceDirectory "${{ runner.temp }}/dsweep-artifacts/evidence-${{ matrix.rid }}"
+
+      - name: Run deterministic demo against packaged binary
+        shell: pwsh
+        run: >-
+          ./scripts/demo.ps1
+          -DsweepPath "${{ runner.temp }}/dsweep-extracted-${{ matrix.rid }}/$(if ('${{ matrix.rid }}' -like 'win-*') { 'dsweep.exe' } else { 'dsweep' })"
+          -OutputDirectory "${{ runner.temp }}/dsweep-artifacts/demo-${{ matrix.rid }}"
+
+      - name: Upload tested artifact and evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dsweep-${{ matrix.rid }}
+          path: ${{ runner.temp }}/dsweep-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  checksums:
+    name: Aggregate SHA256SUMS
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download tested artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: dsweep-*
+          merge-multiple: true
+
+      - name: Verify and aggregate checksums
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem -LiteralPath . -Filter '*.zip' -File)
+          if ($archives.Count -ne 4) { throw "Expected four native archives, found $($archives.Count)." }
+          $checksumFiles = @(Get-ChildItem -LiteralPath . -Filter '*.zip.sha256' -File)
+          if ($checksumFiles.Count -ne 4) { throw "Expected four per-archive checksum files, found $($checksumFiles.Count)." }
+          $lines = foreach ($archive in ($archives | Sort-Object Name)) {
+              $hash = (Get-FileHash -LiteralPath $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              $checksumPath = "$($archive.FullName).sha256"
+              if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) { throw "Missing checksum for $($archive.Name)." }
+              $expected = ((Get-Content -LiteralPath $checksumPath -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+              if ($expected -cne $hash) { throw "Checksum mismatch for $($archive.Name)." }
+              "$hash  $($archive.Name)"
+          }
+          $lines | Set-Content -LiteralPath SHA256SUMS -Encoding ascii
+          Get-Content -LiteralPath SHA256SUMS
+
+      - name: Upload aggregate checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dsweep-SHA256SUMS
+          path: SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
