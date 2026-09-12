@@ -104,7 +104,7 @@ Building from source requires the .NET 10 SDK:
 git clone https://github.com/amasen02/dupesweep.git
 cd dupesweep
 dotnet run --project src/DupeSweep -- --help
-New-Item -ItemType Directory ./target-folder -Force
+mkdir -p ./target-folder
 dotnet run --project src/DupeSweep -- ./target-folder
 ```
 
