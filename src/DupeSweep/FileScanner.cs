@@ -5,16 +5,22 @@ namespace DupeSweep;
 /// <summary>Walks the requested roots, applying size/extension/exclude/symlink filtering as it goes.</summary>
 public static class FileScanner
 {
-    public static IEnumerable<FileEntry> Enumerate(IReadOnlyList<string> roots, ScanOptions options)
+    public static IEnumerable<FileEntry> Enumerate(
+        IReadOnlyList<string> roots,
+        ScanOptions options,
+        Action<string>? onWarning = null,
+        Func<string, bool, (List<string> Files, List<string> Directories)>? listEntries = null)
     {
         var seenPaths = new HashSet<string>(PathComparer);
+        var entryEnumerator = listEntries ?? DefaultListEntries;
+
         foreach (string root in roots)
         {
             string fullRoot = Path.GetFullPath(root);
             if (!Directory.Exists(fullRoot))
                 throw new DirectoryNotFoundException($"directory not found: {root}");
 
-            foreach (FileEntry entry in EnumerateDirectory(fullRoot, options))
+            foreach (FileEntry entry in EnumerateDirectory(fullRoot, options, onWarning, entryEnumerator))
             {
                 if (seenPaths.Add(entry.FullPath))
                     yield return entry;
@@ -22,9 +28,13 @@ public static class FileScanner
         }
     }
 
-    private static IEnumerable<FileEntry> EnumerateDirectory(string directory, ScanOptions options)
+    private static IEnumerable<FileEntry> EnumerateDirectory(
+        string directory,
+        ScanOptions options,
+        Action<string>? onWarning,
+        Func<string, bool, (List<string> Files, List<string> Directories)> listEntries)
     {
-        (List<string> files, List<string> subdirectories) = ListEntries(directory, options.Recursive);
+        (List<string> files, List<string> subdirectories) = ListEntries(directory, options.Recursive, onWarning, listEntries);
 
         foreach (string file in files)
         {
@@ -40,23 +50,33 @@ public static class FileScanner
             if (IsExcluded(subdirectory, options.Excludes))
                 continue;
 
-            foreach (FileEntry entry in EnumerateDirectory(subdirectory, options))
+            foreach (FileEntry entry in EnumerateDirectory(subdirectory, options, onWarning, listEntries))
                 yield return entry;
         }
     }
 
-    private static (List<string> Files, List<string> Directories) ListEntries(string directory, bool recursive)
+    private static (List<string> Files, List<string> Directories) ListEntries(
+        string directory,
+        bool recursive,
+        Action<string>? onWarning,
+        Func<string, bool, (List<string> Files, List<string> Directories)> listEntries)
     {
         try
         {
-            var files = Directory.EnumerateFiles(directory).ToList();
-            var directories = recursive ? Directory.EnumerateDirectories(directory).ToList() : [];
-            return (files, directories);
+            return listEntries(directory, recursive);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
+            onWarning?.Invoke($"skipped unreadable directory: {directory} ({ex.Message})");
             return ([], []);
         }
+    }
+
+    private static (List<string> Files, List<string> Directories) DefaultListEntries(string directory, bool recursive)
+    {
+        var files = Directory.EnumerateFiles(directory).ToList();
+        var directories = recursive ? Directory.EnumerateDirectories(directory).ToList() : [];
+        return (files, directories);
     }
 
     private static FileEntry? TryCreateEntry(string path, ScanOptions options)

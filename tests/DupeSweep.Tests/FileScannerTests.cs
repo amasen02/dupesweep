@@ -152,4 +152,64 @@ public class FileScannerTests
         Assert.Single(entries);
         Assert.Equal(Path.GetFullPath(filePath), entries[0].FullPath);
     }
+
+    [Fact]
+    public void Enumerate_InaccessibleChildDirectory_ReportsWarningAndContinues()
+    {
+        using var dir = new TempDirectory();
+        string accessibleFile = dir.WriteFile("accessible.txt", "content");
+        string forbiddenSubdir = dir.CreateSubdirectory("forbidden");
+
+        var warnings = new List<string>();
+        var options = new ScanOptions { Verbose = true };
+
+        var entries = FileScanner.Enumerate(
+            [dir.Path],
+            options,
+            onWarning: warnings.Add,
+            listEntries: (path, recursive) =>
+            {
+                if (string.Equals(path, forbiddenSubdir, StringComparison.OrdinalIgnoreCase))
+                    throw new UnauthorizedAccessException("Access is denied.");
+
+                return (
+                    [accessibleFile],
+                    [forbiddenSubdir]
+                );
+            }).ToList();
+
+        Assert.Single(entries);
+        Assert.Equal(Path.GetFullPath(accessibleFile), entries[0].FullPath);
+        Assert.Single(warnings);
+        Assert.Contains(forbiddenSubdir, warnings[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Access is denied.", warnings[0]);
+    }
+
+    [Fact]
+    public void Enumerate_InaccessibleChildDirectory_WithoutWarningHandler_ContinuesSilently()
+    {
+        using var dir = new TempDirectory();
+        string accessibleFile = dir.WriteFile("accessible.txt", "content");
+        string forbiddenSubdir = dir.CreateSubdirectory("forbidden");
+
+        var options = new ScanOptions { Verbose = false };
+
+        var entries = FileScanner.Enumerate(
+            [dir.Path],
+            options,
+            onWarning: null,
+            listEntries: (path, recursive) =>
+            {
+                if (string.Equals(path, forbiddenSubdir, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("The device is not ready.");
+
+                return (
+                    [accessibleFile],
+                    [forbiddenSubdir]
+                );
+            }).ToList();
+
+        Assert.Single(entries);
+        Assert.Equal(Path.GetFullPath(accessibleFile), entries[0].FullPath);
+    }
 }
