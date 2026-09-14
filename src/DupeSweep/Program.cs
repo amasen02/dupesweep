@@ -72,7 +72,10 @@ public static class Program
         List<FileEntry> entries;
         try
         {
-            entries = FileScanner.Enumerate(options.Roots, options).ToList();
+            Action<string>? onWarning = options.Verbose
+                ? warning => Console.Error.WriteLine($"dsweep: {warning}")
+                : null;
+            entries = FileScanner.Enumerate(options.Roots, options, onWarning).ToList();
         }
         catch (DirectoryNotFoundException ex)
         {

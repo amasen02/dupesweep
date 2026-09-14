@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- In `--verbose` mode, report skipped unreadable directory enumeration errors to stderr with the failing path and reason while continuing the scan past inaccessible directories.
 - `dsweep --version` prints `DupeSweep <version>` and exits 0 without scanning, including when a
   directory argument is present. The version is read from the assembly version metadata that the
   build sets from the single `Version` property in `DupeSweep.csproj`.
