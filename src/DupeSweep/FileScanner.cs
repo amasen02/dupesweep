@@ -9,10 +9,13 @@ public static class FileScanner
         IReadOnlyList<string> roots,
         ScanOptions options,
         Action<string>? onWarning = null,
-        Func<string, bool, (List<string> Files, List<string> Directories)>? listEntries = null)
+        Func<string, bool, (List<string> Files, List<string> Directories)>? listEntries = null,
+        Func<string, string>? directoryResolver = null)
     {
         var seenPaths = new HashSet<string>(PathComparer);
+        var visitedDirectories = new HashSet<string>(PathComparer);
         var entryEnumerator = listEntries ?? DefaultListEntries;
+        var resolveDirectory = directoryResolver ?? DefaultResolveDirectory;
 
         foreach (string root in roots)
         {
@@ -20,7 +23,12 @@ public static class FileScanner
             if (!Directory.Exists(fullRoot))
                 throw new DirectoryNotFoundException($"directory not found: {root}");
 
-            foreach (FileEntry entry in EnumerateDirectory(fullRoot, options, onWarning, entryEnumerator))
+            if (options.FollowSymlinks)
+            {
+                visitedDirectories.Add(resolveDirectory(fullRoot));
+            }
+
+            foreach (FileEntry entry in EnumerateDirectory(fullRoot, options, onWarning, entryEnumerator, resolveDirectory, visitedDirectories))
             {
                 if (seenPaths.Add(entry.FullPath))
                     yield return entry;
@@ -32,7 +40,9 @@ public static class FileScanner
         string directory,
         ScanOptions options,
         Action<string>? onWarning,
-        Func<string, bool, (List<string> Files, List<string> Directories)> listEntries)
+        Func<string, bool, (List<string> Files, List<string> Directories)> listEntries,
+        Func<string, string> resolveDirectory,
+        HashSet<string> visitedDirectories)
     {
         (List<string> files, List<string> subdirectories) = ListEntries(directory, options.Recursive, onWarning, listEntries);
 
@@ -50,7 +60,14 @@ public static class FileScanner
             if (IsExcluded(subdirectory, options.Excludes))
                 continue;
 
-            foreach (FileEntry entry in EnumerateDirectory(subdirectory, options, onWarning, listEntries))
+            if (options.FollowSymlinks)
+            {
+                string canonicalSubdir = resolveDirectory(subdirectory);
+                if (!visitedDirectories.Add(canonicalSubdir))
+                    continue;
+            }
+
+            foreach (FileEntry entry in EnumerateDirectory(subdirectory, options, onWarning, listEntries, resolveDirectory, visitedDirectories))
                 yield return entry;
         }
     }
@@ -77,6 +94,25 @@ public static class FileScanner
         var files = Directory.EnumerateFiles(directory).ToList();
         var directories = recursive ? Directory.EnumerateDirectories(directory).ToList() : [];
         return (files, directories);
+    }
+
+    private static string DefaultResolveDirectory(string path)
+    {
+        try
+        {
+            var info = new DirectoryInfo(path);
+            if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                FileSystemInfo? target = info.ResolveLinkTarget(returnFinalTarget: true);
+                if (target is not null)
+                    return Path.GetFullPath(target.FullName);
+            }
+            return Path.GetFullPath(info.FullName);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            return Path.GetFullPath(path);
+        }
     }
 
     private static FileEntry? TryCreateEntry(string path, ScanOptions options)

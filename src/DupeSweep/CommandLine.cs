@@ -171,7 +171,7 @@ public static class CommandLine
               --min-size <size>    Ignore files smaller than this (default 1; 0 includes empty files), e.g. 4K, 10M.
               --ext <list>         Only consider these extensions, e.g. .jpg,.png
               --exclude <glob>     Exclude files/directories matching a glob (repeatable), e.g. node_modules, *.tmp
-              --follow-symlinks    Follow symlinked files and directories (off by default; no cycle detection).
+              --follow-symlinks    Follow symlinked files and directories with cycle detection (off by default).
               --keep <strategy>    Which copy to keep per group: first (default), oldest, newest, shortest-path.
               --apply <mode>       Act on duplicates: 'quarantine' (movable/reversible) or 'delete' (permanent).
               --quarantine-dir <p> Destination for --apply quarantine (default: <first-dir>/.dupesweep-quarantine).
