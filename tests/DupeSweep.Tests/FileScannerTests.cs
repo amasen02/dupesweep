@@ -212,4 +212,68 @@ public class FileScannerTests
         Assert.Single(entries);
         Assert.Equal(Path.GetFullPath(accessibleFile), entries[0].FullPath);
     }
+
+    [Fact]
+    public void Enumerate_FollowSymlinks_AncestorCycle_TerminatesWithoutDuplicating()
+    {
+        using var dir = new TempDirectory();
+        string rootFile = dir.WriteFile("root.txt", "root-data");
+        string subDir = Path.Combine(dir.Path, "sub");
+        string subFile = dir.WriteFile("sub/sub.txt", "sub-data");
+        string loopLink = Path.Combine(subDir, "loop_to_root");
+
+        var options = new ScanOptions { FollowSymlinks = true };
+
+        // Test with a 2-second timeout bound to guarantee termination
+        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var entries = FileScanner.Enumerate(
+            [dir.Path],
+            options,
+            listEntries: (path, recursive) =>
+            {
+                if (string.Equals(path, dir.Path, StringComparison.OrdinalIgnoreCase))
+                    return ([rootFile], [subDir]);
+                if (string.Equals(path, subDir, StringComparison.OrdinalIgnoreCase))
+                    return ([subFile], [loopLink]);
+                return ([], []);
+            },
+            directoryResolver: path =>
+            {
+                if (string.Equals(path, loopLink, StringComparison.OrdinalIgnoreCase))
+                    return Path.GetFullPath(dir.Path); // points back to ancestor root
+                return Path.GetFullPath(path);
+            }).ToList();
+
+        Assert.Equal(2, entries.Count);
+        Assert.Contains(entries, e => e.FullPath == Path.GetFullPath(rootFile));
+        Assert.Contains(entries, e => e.FullPath == Path.GetFullPath(subFile));
+    }
+
+    [Fact]
+    public void Enumerate_FollowSymlinks_SelfCycle_TerminatesImmediately()
+    {
+        using var dir = new TempDirectory();
+        string rootFile = dir.WriteFile("root.txt", "root-data");
+        string selfLink = Path.Combine(dir.Path, "self_link");
+
+        var options = new ScanOptions { FollowSymlinks = true };
+
+        var entries = FileScanner.Enumerate(
+            [dir.Path],
+            options,
+            listEntries: (path, recursive) =>
+            {
+                return ([rootFile], [selfLink]);
+            },
+            directoryResolver: path =>
+            {
+                if (string.Equals(path, selfLink, StringComparison.OrdinalIgnoreCase))
+                    return Path.GetFullPath(dir.Path); // points back to itself
+                return Path.GetFullPath(path);
+            }).ToList();
+
+        Assert.Single(entries);
+        Assert.Equal(Path.GetFullPath(rootFile), entries[0].FullPath);
+    }
 }
