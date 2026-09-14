@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `dsweep --version` prints `DupeSweep <version>` and exits 0 without scanning, including when a
+  directory argument is present. The version is read from the assembly version metadata that the
+  build sets from the single `Version` property in `DupeSweep.csproj`.
 - Initial release: `dsweep <dir>` scan mode with size → quick-hash → full-SHA-256 duplicate
   detection funnel, parallel hashing, `--keep` strategies (first/oldest/newest/shortest-path),
   `--apply quarantine` (reversible) and `--apply delete` (permanent), JSON reporting, and

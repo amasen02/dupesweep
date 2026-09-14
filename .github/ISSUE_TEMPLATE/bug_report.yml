@@ -41,8 +41,8 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: OS + `dotnet --version` (or the published build you used).
-      placeholder: Windows 11, .NET 10.0.301
+      description: OS + the output of `dsweep --version` (or `dotnet --version` when you built from source).
+      placeholder: Windows 11, DupeSweep 1.0.1
     validations:
       required: false
   - type: textarea

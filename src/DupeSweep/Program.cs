@@ -21,6 +21,12 @@ public static class Program
             return 2;
         }
 
+        if (options.ShowVersion)
+        {
+            Console.WriteLine(BuildInfo.Describe());
+            return 0;
+        }
+
         if (options.Help)
         {
             Console.WriteLine(CommandLine.Usage);

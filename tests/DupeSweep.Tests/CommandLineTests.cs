@@ -119,6 +119,42 @@ public class CommandLineTests
     }
 
     [Fact]
+    public void Parse_Version_SetsFlag()
+    {
+        ScanOptions options = CommandLine.Parse(["--version"]);
+
+        Assert.True(options.ShowVersion);
+        Assert.False(options.Help);
+    }
+
+    [Fact]
+    public void Parse_Version_WithoutTheFlag_LeavesItUnset()
+    {
+        ScanOptions options = CommandLine.Parse(["some-dir"]);
+
+        Assert.False(options.ShowVersion);
+    }
+
+    [Theory]
+    [InlineData("--version", "some-dir")]
+    [InlineData("some-dir", "--version")]
+    public void Parse_Version_IsRecognisedAroundDirectoryArguments(string first, string second)
+    {
+        ScanOptions options = CommandLine.Parse([first, second]);
+
+        Assert.True(options.ShowVersion);
+    }
+
+    [Fact]
+    public void Parse_Version_InRestoreMode_SetsFlag()
+    {
+        ScanOptions options = CommandLine.Parse(["restore", "--version"]);
+
+        Assert.True(options.ShowVersion);
+        Assert.True(options.RestoreMode);
+    }
+
+    [Fact]
     public void Parse_Restore_SetsRestoreModeAndManifestPath()
     {
         ScanOptions options = CommandLine.Parse(["restore", "manifest.json"]);
