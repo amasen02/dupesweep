@@ -8,6 +8,7 @@ public enum KeepStrategy { First, Oldest, Newest, ShortestPath }
 public sealed class ScanOptions
 {
     public bool Help { get; set; }
+    public bool ShowVersion { get; set; }
     public List<string> Roots { get; } = [];
     public bool Recursive { get; set; } = true;
     public long MinSizeBytes { get; set; } = 1;

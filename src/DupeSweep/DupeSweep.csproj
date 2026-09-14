@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <AssemblyName>dsweep</AssemblyName>
     <RootNamespace>DupeSweep</RootNamespace>
+    <!-- Single source of truth for the release version reported by the version command. -->
+    <Version>1.0.1</Version>
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- Multi-core hashing benefits from server GC's parallel background collection -->

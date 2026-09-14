@@ -25,6 +25,9 @@ public static class CommandLine
                 case "--help":
                     options.Help = true;
                     break;
+                case "--version":
+                    options.ShowVersion = true;
+                    break;
                 case "--no-recursive":
                     options.Recursive = false;
                     break;
@@ -85,6 +88,9 @@ public static class CommandLine
                 case "-h":
                 case "--help":
                     options.Help = true;
+                    break;
+                case "--version":
+                    options.ShowVersion = true;
                     break;
                 case "--dry-run":
                     options.DryRun = true;
@@ -173,6 +179,7 @@ public static class CommandLine
               --json               Emit a machine-readable JSON report instead of text.
           -q, --quiet              Minimal output.
           -v, --verbose            Verbose logging (reports skipped/unreadable files).
+              --version            Print the DupeSweep version and exit without scanning file contents.
           -h, --help               Show this help.
 
         RESTORE:

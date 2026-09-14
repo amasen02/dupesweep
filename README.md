@@ -117,6 +117,13 @@ dsweep restore <manifest.json> [--dry-run]
 
 The directory arguments are positional. There is no `scan` subcommand.
 
+Identify the exact build you are running before reporting a result:
+
+```bash
+# Prints e.g. "DupeSweep 1.0.1" and exits without scanning.
+dsweep --version
+```
+
 Scan and report without changing anything:
 
 ```bash
@@ -157,6 +164,7 @@ has no restore path.
 | `-j, --parallel <n>` | Hashing worker count, from 1 to 64. |
 | `--json` | Emit a machine-readable JSON report. |
 | `-q, --quiet` / `-v, --verbose` | Reduce output or include skipped-file warnings. |
+| `--version` | Print the DupeSweep version and exit without scanning. |
 
 Run the reproducible filesystem demo with:
 
@@ -188,6 +196,7 @@ for source-grounded starter tasks.
 src/DupeSweep/
   Program.cs              CLI orchestration
   CommandLine.cs          argument parsing and usage
+  BuildInfo.cs            release version read from assembly metadata
   FileScanner.cs          directory walk and filters
   Hashing.cs              quick and full SHA-256 hashing
   DuplicateFinder.cs      duplicate grouping
