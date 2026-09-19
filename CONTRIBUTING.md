@@ -22,8 +22,7 @@ dotnet build DupeSweep.slnx --configuration Release --no-restore
 dotnet test DupeSweep.slnx --configuration Release --no-build
 ```
 
-To exercise the CLI help and the generated filesystem demo (PowerShell 7+ is required
-for the `pwsh` command):
+To exercise the CLI help and the generated filesystem demo (PowerShell 7+ is required):
 
 ```bash
 dotnet run --project src/DupeSweep -- --help
@@ -40,19 +39,23 @@ fixture after the run. Do not point it at a directory containing user files.
 - Prefer descriptive names and comments that explain a design reason.
 - Preserve async cancellation and the existing `ConfigureAwait(false)` convention in library code.
 - Keep file-system tests inside their isolated temporary directory.
-- Any change to quarantine, restore, or permanent delete must include a test showing that existing data is not silently lost.
-- Do not add benchmarks or adoption claims without a reproducible method and published input data.
+- Changes to quarantine, restore, or permanent delete must include a data-preservation test.
+- Do not add benchmarks or adoption claims without reproducible input data.
 
 ## Pull requests
 
-The pull request description should state the problem, the resulting behavior, and the
-checks run. Complete the repository pull request template. CI must pass on its supported
-Ubuntu and Windows jobs; platform-specific behavior should include a focused test or a
-clear explanation of why a test is not practical.
+The description should state the problem, resulting behavior, and checks run. Complete
+the pull request template. CI must pass on supported Ubuntu and Windows jobs; platform
+specific behavior should include a focused test or explain why one is impractical.
 
-Pull requests build and test the release matrix, while publication happens only after
-the merged source has been rebuilt and its tested archives and checksums reviewed.
-Published executables are currently unsigned, so changes to packaging should preserve
-the SHA-256 manifest and the documented source/build relationship.
+Published executables are currently unsigned, so packaging changes must preserve the
+SHA-256 manifest and documented source/build relationship.
 
 The [Code of Conduct](CODE_OF_CONDUCT.md) applies to all project spaces.
+
+## Reproducible validation
+
+For changes that affect filesystem scanning or duplicate grouping, include the exact
+`dotnet` commands used and the operating system in the pull request description.
+Keep fixtures under the test harness's isolated temporary directory and avoid real
+user data.
